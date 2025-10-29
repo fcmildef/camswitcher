@@ -57,8 +57,8 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         super().__init__(application=app)
         self.set_title("Simple Video Switcher")
         self.set_resizable(True)
-        self.set_default_size(1, 1)
-        self.set_size_request(480, 160)  # minimum usable size
+        self.set_default_size(360, 320)
+        self.set_size_request(320, 280)
         self.set_auto_startup_notification(True)
 
         # GST init
@@ -124,6 +124,19 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         button.control:disabled {
             opacity: 0.5;
         }
+        .status-indicator {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .status-indicator.status-idle {
+            color: #94a3b8;
+        }
+        .status-indicator.status-ok {
+            color: #22c55e;
+        }
+        .status-indicator.status-error {
+            color: #ef4444;
+        }
         """)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(),
@@ -136,19 +149,28 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         # Append to control row
         ctrl.append(self.btn_start)
         ctrl.append(self.btn_stop)
-        ctrl.append(self.btn_cam1)
-        ctrl.append(self.btn_cam2)
+        self.cam1_status = None
+        self.cam2_status = None
+        self.cam1_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.cam1_row.append(self.btn_cam1)
+        self.cam2_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.cam2_row.append(self.btn_cam2)
+        self._set_all_cam_status("idle")
+        ctrl.append(self.cam1_row)
+        ctrl.append(self.cam2_row)
 
         # Defaults & options row
-        defaults_row = Gtk.Box(spacing=8)
+        defaults_row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, halign=Gtk.Align.CENTER)
         outer.append(defaults_row)
-        self.chk_preview = Gtk.CheckButton(label="Show preview")
-        self.chk_preview.set_active(True)
+        self.chk_preview = Gtk.CheckButton()
+        self.chk_preview.set_active(False)
         self.chk_autoload = Gtk.CheckButton(label="Auto-load defaults on start")
-        btn_settings = Gtk.Button(label="Settings…")
-        btn_settings.connect("clicked", self.on_open_settings)
-        defaults_row.append(btn_settings)
-        defaults_row.append(self.chk_preview)
+        self.btn_settings = Gtk.Button(label="Settings…")
+        self.btn_settings.connect("clicked", self.on_open_settings)
+        self.btn_settings.get_style_context().add_class("control")
+        self.btn_settings.set_hexpand(False)
+        self.btn_settings.set_halign(Gtk.Align.CENTER)
+        defaults_row.append(self.btn_settings)
 
         # initial sensitivity
         self.btn_stop.set_sensitive(False)
@@ -210,18 +232,21 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         if not ok:
             self._error(err or "Failed to create pipeline")
             self.teardown_pipeline()
+            self._set_all_cam_status("error")
             return
 
         ret = self.pipeline.set_state(Gst.State.PLAYING)
         if ret == Gst.StateChangeReturn.FAILURE:
             self._error("Failed to start GStreamer pipeline.")
             self.teardown_pipeline()
+            self._set_all_cam_status("error")
             return
 
         self.btn_start.set_sensitive(False)
         self.btn_stop.set_sensitive(True)
         self.btn_cam1.set_sensitive(True)
         self.btn_cam2.set_sensitive(True)
+        self._set_all_cam_status("ok")
         self._error("")
 
     def on_stop(self, *_):
@@ -230,9 +255,11 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         self.btn_stop.set_sensitive(False)
         self.btn_cam1.set_sensitive(False)
         self.btn_cam2.set_sensitive(False)
+        self._set_all_cam_status("idle")
 
     def on_close(self, *_):
         self.teardown_pipeline()
+        self._set_all_cam_status("idle")
         return False
 
     def _error(self, msg: str):
@@ -464,10 +491,51 @@ class SwitcherWindow(Gtk.ApplicationWindow):
             return
         pad = self.pad_cam1 if cam_idx == 1 else self.pad_cam2
         if not pad:
+            self._set_cam_status(cam_idx, "error")
             return
         self.input_selector.set_property("active-pad", pad)
         self.active_cam = cam_idx
+        self._set_cam_status(cam_idx, "ok")
         print(f"Switched to Cam {cam_idx}")
+
+    def _create_status_label(self, state: str):
+        label = Gtk.Label(label="●")
+        try:
+            label.set_margin_start(6)
+            label.set_margin_end(6)
+            ctx = label.get_style_context()
+            ctx.add_class("status-indicator")
+            ctx.add_class(f"status-{state}")
+        except Exception:
+            pass
+        return label
+
+    def _set_cam_status(self, cam_idx: int, state: str):
+        row_attr = "cam1_row" if cam_idx == 1 else "cam2_row"
+        if not hasattr(self, row_attr):
+            return
+        label_attr = "cam1_status" if cam_idx == 1 else "cam2_status"
+        row = getattr(self, row_attr)
+        old_label = getattr(self, label_attr, None)
+        if old_label:
+            try:
+                row.remove(old_label)
+            except Exception:
+                pass
+        new_label = self._create_status_label(state)
+        row.append(new_label)
+        setattr(self, label_attr, new_label)
+
+    def _set_all_cam_status(self, state: str):
+        self._set_cam_status(1, state)
+        self._set_cam_status(2, state)
+
+    def _on_primary_button_size(self, widget, allocation):
+        if not getattr(self, "btn_settings", None):
+            return
+        width = allocation.width
+        if width > 0:
+            self.btn_settings.set_size_request(width, -1)
 
     def on_open_settings(self, *_):
         if not self.settings_dialog:
@@ -494,6 +562,7 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         add_row("Cam 1:", self.cmb_cam1)
         add_row("Cam 2:", self.cmb_cam2)
         add_row("Virtual Out:", self.cmb_out)
+        add_row("Show preview:", self.chk_preview)
 
         autoload_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         autoload_row.append(self.chk_autoload)
