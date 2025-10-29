@@ -75,24 +75,10 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin_top=10, margin_bottom=10, margin_start=10, margin_end=10)
         self.set_child(outer)
 
-        # Top row: device pickers
-        row = Gtk.Box(spacing=8)
-        outer.append(row)
-
         self.cmb_cam1 = Gtk.DropDown.new_from_strings(list_video_devices())
         self.cmb_cam2 = Gtk.DropDown.new_from_strings(list_video_devices())
         self.cmb_out = Gtk.DropDown.new_from_strings(list_video_devices())
-
-        row.append(Gtk.Label(label="Cam 1:"))
-        row.append(self.cmb_cam1)
-        row.append(Gtk.Label(label="Cam 2:"))
-        row.append(self.cmb_cam2)
-        row.append(Gtk.Label(label="Virtual Out:"))
-        row.append(self.cmb_out)
-
-        refresh_btn = Gtk.Button(label="Refresh Devices")
-        refresh_btn.connect("clicked", self.on_refresh)
-        row.append(refresh_btn)
+        self.settings_dialog = None
 
         # Preview area
         self.preview_box = Gtk.Box()
@@ -107,7 +93,7 @@ class SwitcherWindow(Gtk.ApplicationWindow):
 
         # --- Control Buttons (modern, larger) ---
         # Create control row first so we can append later in one place
-        ctrl = Gtk.Box(spacing=16, halign=Gtk.Align.CENTER)
+        ctrl = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, halign=Gtk.Align.CENTER)
         outer.append(ctrl)
 
         # Buttons with friendly icons
@@ -120,11 +106,11 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         css_provider = Gtk.CssProvider()
         css_provider.load_from_data(b"""
         button.control {
-            font-size: 22px;
-            padding: 18px 32px;
-            margin: 6px;
-            border-radius: 14px;
-            min-width: 220px;
+            font-size: 18px;
+            padding: 12px 24px;
+            margin: 4px;
+            border-radius: 12px;
+            min-width: 200px;
             background: #1e293b;
             color: white;
             transition: background 120ms ease-in-out;
@@ -156,17 +142,13 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         # Defaults & options row
         defaults_row = Gtk.Box(spacing=8)
         outer.append(defaults_row)
-        self.chk_preview = Gtk.CheckButton(label="Show preview window")
+        self.chk_preview = Gtk.CheckButton(label="Show preview")
         self.chk_preview.set_active(True)
         self.chk_autoload = Gtk.CheckButton(label="Auto-load defaults on start")
-        btn_save_defaults = Gtk.Button(label="Save as Default")
-        btn_clear_defaults = Gtk.Button(label="Clear Defaults")
-        btn_save_defaults.connect("clicked", self.on_save_defaults)
-        btn_clear_defaults.connect("clicked", self.on_clear_defaults)
+        btn_settings = Gtk.Button(label="Settings…")
+        btn_settings.connect("clicked", self.on_open_settings)
+        defaults_row.append(btn_settings)
         defaults_row.append(self.chk_preview)
-        defaults_row.append(self.chk_autoload)
-        defaults_row.append(btn_save_defaults)
-        defaults_row.append(btn_clear_defaults)
 
         # initial sensitivity
         self.btn_stop.set_sensitive(False)
@@ -486,6 +468,60 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         self.input_selector.set_property("active-pad", pad)
         self.active_cam = cam_idx
         print(f"Switched to Cam {cam_idx}")
+
+    def on_open_settings(self, *_):
+        if not self.settings_dialog:
+            self.settings_dialog = self._create_settings_dialog()
+        self.on_refresh()
+        self.settings_dialog.present()
+
+    def _create_settings_dialog(self):
+        dialog = Gtk.Window()
+        dialog.set_title("Device Settings")
+        dialog.set_transient_for(self)
+        dialog.set_modal(True)
+        dialog.set_default_size(400, 220)
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        dialog.set_child(outer)
+
+        def add_row(label_text, widget):
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            row.append(Gtk.Label(label=label_text))
+            row.append(widget)
+            outer.append(row)
+
+        add_row("Cam 1:", self.cmb_cam1)
+        add_row("Cam 2:", self.cmb_cam2)
+        add_row("Virtual Out:", self.cmb_out)
+
+        autoload_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        autoload_row.append(self.chk_autoload)
+        outer.append(autoload_row)
+
+        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8, halign=Gtk.Align.END)
+        refresh_btn = Gtk.Button(label="Refresh")
+        refresh_btn.connect("clicked", self.on_refresh)
+        save_btn = Gtk.Button(label="Save Defaults")
+        save_btn.connect("clicked", self.on_save_defaults)
+        clear_btn = Gtk.Button(label="Clear Defaults")
+        clear_btn.connect("clicked", self.on_clear_defaults)
+        close_btn = Gtk.Button(label="Close")
+        close_btn.connect("clicked", lambda *_: dialog.hide())
+        buttons.append(refresh_btn)
+        buttons.append(save_btn)
+        buttons.append(clear_btn)
+        buttons.append(close_btn)
+        outer.append(buttons)
+
+        dialog.connect("close-request", self._on_settings_close)
+        return dialog
+
+    def _on_settings_close(self, *_):
+        if self.settings_dialog:
+            self.settings_dialog.hide()
+            return True
+        return False
 
 class SwitcherApp(Gtk.Application):
     def __init__(self):
