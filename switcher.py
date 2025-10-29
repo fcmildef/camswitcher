@@ -57,8 +57,7 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         super().__init__(application=app)
         self.set_title("Simple Video Switcher")
         self.set_resizable(True)
-        self.set_default_size(360, 320)
-        self.set_size_request(320, 280)
+        self.set_default_size(1, 1)
         self.set_auto_startup_notification(True)
 
         # GST init
@@ -82,8 +81,8 @@ class SwitcherWindow(Gtk.ApplicationWindow):
 
         # Preview area
         self.preview_box = Gtk.Box()
-        self.preview_box.set_hexpand(True)
-        self.preview_box.set_vexpand(True)
+        self.preview_box.set_hexpand(False)
+        self.preview_box.set_vexpand(False)
         outer.append(self.preview_box)
 
         # Status bar for errors (Debian 12 friendly, no fancy dialogs needed)
@@ -169,6 +168,7 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         self.btn_settings.connect("clicked", self.on_open_settings)
         self.btn_settings.get_style_context().add_class("control")
         self.btn_settings.set_hexpand(False)
+        self.btn_settings.set_size_request(220, -1)
         self.btn_settings.set_halign(Gtk.Align.CENTER)
         defaults_row.append(self.btn_settings)
 
@@ -263,9 +263,35 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         return False
 
     def _error(self, msg: str):
-        self.status.set_text(msg)
-        if msg:
-            print("[Error]", msg, file=sys.stderr)
+        # Keep inline label empty; we now surface errors via dialogs
+        self.status.set_text("")
+        if not msg:
+            return
+
+        print("[Error]", msg, file=sys.stderr)
+        try:
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                modal=True,
+                buttons=Gtk.ButtonsType.OK,
+                message_type=Gtk.MessageType.ERROR,
+                text=msg,
+            )
+            dialog.connect("response", lambda d, *_: d.destroy())
+            dialog.present()
+        except Exception:
+            # Fallback if MessageDialog unavailable in the environment
+            fallback = Gtk.Window()
+            fallback.set_transient_for(self)
+            fallback.set_title("Error")
+            fallback.set_modal(True)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+            box.append(Gtk.Label(label=msg))
+            close = Gtk.Button(label="OK")
+            close.connect("clicked", lambda *_: fallback.destroy())
+            box.append(close)
+            fallback.set_child(box)
+            fallback.present()
 
     # --- GStreamer ---
     # --- Defaults persistence ---
