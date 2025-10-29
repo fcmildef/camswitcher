@@ -39,6 +39,6 @@ Run:
 run you videoconferencing software, and choose /dev/video10 or "Virtual Cam" 
 
 
-## AI dislaimer
+## AI disclaimer
 This application is mainly writen by OpenAI`s ChatGPT5, and checked and modified by a human
 
