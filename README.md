@@ -34,4 +34,5 @@ Load v4l2loopback (once per boot or persist via modprobe.d):
 Run:
   python3 video_switcher.py
 
+This application is writing using OpenAI`s ChatGPT5
 
