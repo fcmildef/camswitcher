@@ -8,8 +8,8 @@ Simple Video Switcher (Debian 12 / Ubuntu 24 compatible)
 
 Tested on: Debian 12 (Bookworm) and Ubuntu 24.04
 
-##Dependencies (Debian 12 / ubuntu 24):
-###Debian 12:
+## Dependencies (Debian 12 / ubuntu 24):
+### Debian 12:
  sudo apt update && sudo apt install -y \
     python3-gi python3-gst-1.0 gir1.2-gtk-4.0 gir1.2-gstreamer-1.0 \
     gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
@@ -17,7 +17,7 @@ Tested on: Debian 12 (Bookworm) and Ubuntu 24.04
     gstreamer1.0-gtk3 gstreamer1.0-gl v4l2loopback-dkms v4l2loopback-utils
    
 
-###Ubuntu 24:
+### Ubuntu 24:
 sudo apt update && sudo apt install -y \
     python3-gi python3-gst-1.0 gir1.2-gtk-4.0 gir1.2-gstreamer-1.0 \
     gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
