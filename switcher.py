@@ -71,7 +71,7 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         self.active_cam = 1
 
         # UI
-        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin_top=10, margin_bottom=10, margin_start=10, margin_end=10)
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=0, margin_bottom=0, margin_start=0, margin_end=0)
         self.set_child(outer)
 
         self.cmb_cam1 = Gtk.DropDown.new_from_strings(list_video_devices())
@@ -92,7 +92,7 @@ class SwitcherWindow(Gtk.ApplicationWindow):
 
         # --- Control Buttons (modern, larger) ---
         # Create control row first so we can append later in one place
-        ctrl = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, halign=Gtk.Align.CENTER)
+        ctrl = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, halign=Gtk.Align.CENTER)
         outer.append(ctrl)
 
         # Buttons with friendly icons
@@ -105,14 +105,20 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         css_provider = Gtk.CssProvider()
         css_provider.load_from_data(b"""
         button.control {
-            font-size: 18px;
-            padding: 12px 24px;
-            margin: 4px;
-            border-radius: 12px;
-            min-width: 200px;
+            font-size: 20px;
+            padding: 8px 18px;
+            margin: 2px;
+            border-radius: 8px;
+            min-width: 120px;
             background: #1e293b;
             color: white;
             transition: background 120ms ease-in-out;
+        }
+        button.control.primary {
+            min-width: 20px;
+        }
+        button.control.control-settings {
+            min-width: 10px;
         }
         button.control:hover {
             background: #334155;
@@ -124,7 +130,7 @@ class SwitcherWindow(Gtk.ApplicationWindow):
             opacity: 0.5;
         }
         .status-indicator {
-            font-size: 18px;
+            font-size: 14px;
             font-weight: bold;
         }
         .status-indicator.status-idle {
@@ -144,33 +150,37 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         )
         for b in (self.btn_start, self.btn_stop, self.btn_cam1, self.btn_cam2):
             b.get_style_context().add_class("control")
+        for b in (self.btn_start, self.btn_stop):
+            b.get_style_context().add_class("primary")
 
         # Append to control row
-        ctrl.append(self.btn_start)
-        ctrl.append(self.btn_stop)
+        primary_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4, halign=Gtk.Align.CENTER)
+        self.btn_settings = Gtk.Button(label="⚙")
+        self.btn_settings.connect("clicked", self.on_open_settings)
+        self.btn_settings.get_style_context().add_class("control")
+        self.btn_settings.get_style_context().add_class("primary")
+        self.btn_settings.get_style_context().add_class("control-settings")
+        self.btn_settings.set_hexpand(False)
+        try:
+            self.btn_settings.set_tooltip_text("Settings")
+        except Exception:
+            pass
+        primary_row.append(self.btn_start)
+        primary_row.append(self.btn_stop)
+        primary_row.append(self.btn_settings)
+        ctrl.append(primary_row)
         self.cam1_status = None
         self.cam2_status = None
-        self.cam1_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.cam1_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.cam1_row.append(self.btn_cam1)
-        self.cam2_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.cam2_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.cam2_row.append(self.btn_cam2)
         self._set_all_cam_status("idle")
         ctrl.append(self.cam1_row)
         ctrl.append(self.cam2_row)
-
-        # Defaults & options row
-        defaults_row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, halign=Gtk.Align.CENTER)
-        outer.append(defaults_row)
         self.chk_preview = Gtk.CheckButton()
         self.chk_preview.set_active(False)
         self.chk_autoload = Gtk.CheckButton(label="Auto-load defaults on start")
-        self.btn_settings = Gtk.Button(label="Settings…")
-        self.btn_settings.connect("clicked", self.on_open_settings)
-        self.btn_settings.get_style_context().add_class("control")
-        self.btn_settings.set_hexpand(False)
-        self.btn_settings.set_size_request(220, -1)
-        self.btn_settings.set_halign(Gtk.Align.CENTER)
-        defaults_row.append(self.btn_settings)
 
         # initial sensitivity
         self.btn_stop.set_sensitive(False)
@@ -285,7 +295,7 @@ class SwitcherWindow(Gtk.ApplicationWindow):
             fallback.set_transient_for(self)
             fallback.set_title("Error")
             fallback.set_modal(True)
-            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=11, margin_top=11, margin_bottom=11, margin_start=11, margin_end=11)
             box.append(Gtk.Label(label=msg))
             close = Gtk.Button(label="OK")
             close.connect("clicked", lambda *_: fallback.destroy())
@@ -527,8 +537,8 @@ class SwitcherWindow(Gtk.ApplicationWindow):
     def _create_status_label(self, state: str):
         label = Gtk.Label(label="●")
         try:
-            label.set_margin_start(6)
-            label.set_margin_end(6)
+            label.set_margin_start(5)
+            label.set_margin_end(5)
             ctx = label.get_style_context()
             ctx.add_class("status-indicator")
             ctx.add_class(f"status-{state}")
@@ -576,11 +586,11 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         dialog.set_modal(True)
         dialog.set_default_size(400, 220)
 
-        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=11, margin_top=11, margin_bottom=11, margin_start=11, margin_end=11)
         dialog.set_child(outer)
 
         def add_row(label_text, widget):
-            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7)
             row.append(Gtk.Label(label=label_text))
             row.append(widget)
             outer.append(row)
@@ -590,11 +600,11 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         add_row("Virtual Out:", self.cmb_out)
         add_row("Show preview:", self.chk_preview)
 
-        autoload_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        autoload_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7)
         autoload_row.append(self.chk_autoload)
         outer.append(autoload_row)
 
-        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8, halign=Gtk.Align.END)
+        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7, halign=Gtk.Align.END)
         refresh_btn = Gtk.Button(label="Refresh")
         refresh_btn.connect("clicked", self.on_refresh)
         save_btn = Gtk.Button(label="Save Defaults")
