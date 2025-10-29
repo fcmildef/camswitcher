@@ -69,6 +69,7 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         self.pad_cam1 = None
         self.pad_cam2 = None
         self.active_cam = 1
+        self._autostart_scheduled = False
 
         # UI
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=0, margin_bottom=0, margin_start=0, margin_end=0)
@@ -181,6 +182,8 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         self.chk_preview = Gtk.CheckButton()
         self.chk_preview.set_active(False)
         self.chk_autoload = Gtk.CheckButton(label="Auto-load defaults on start")
+        self.chk_autostart = Gtk.CheckButton(label="Auto-start pipeline")
+        self.chk_autostart.set_active(False)
 
         # initial sensitivity
         self.btn_stop.set_sensitive(False)
@@ -312,6 +315,7 @@ class SwitcherWindow(Gtk.ApplicationWindow):
             "out": self._get_selected(self.cmb_out),
             "preview": self.chk_preview.get_active(),
             "autoload": self.chk_autoload.get_active(),
+            "autostart": self.chk_autostart.get_active(),
         }
         try:
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -361,9 +365,18 @@ class SwitcherWindow(Gtk.ApplicationWindow):
             self._select_value(self.cmb_out, data.get("out"))
             self.chk_preview.set_active(bool(data.get("preview", True)))
             self.chk_autoload.set_active(bool(data.get("autoload", False)))
+            self.chk_autostart.set_active(bool(data.get("autostart", False)))
             if autoload and not data.get("autoload", False):
                 return
             # Autoload enabled → selections already set
+            if (
+                autoload
+                and data.get("autoload", False)
+                and data.get("autostart", False)
+                and not self._autostart_scheduled
+            ):
+                self._autostart_scheduled = True
+                GObject.idle_add(self.on_start)
         except Exception as e:
             self._error(f"Failed to load defaults: {e}")
 
@@ -599,10 +612,8 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         add_row("Cam 2:", self.cmb_cam2)
         add_row("Virtual Out:", self.cmb_out)
         add_row("Show preview:", self.chk_preview)
-
-        autoload_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7)
-        autoload_row.append(self.chk_autoload)
-        outer.append(autoload_row)
+        add_row("Auto-load defaults:", self.chk_autoload)
+        add_row("Auto-start pipeline:", self.chk_autostart)
 
         buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7, halign=Gtk.Align.END)
         refresh_btn = Gtk.Button(label="Refresh")
