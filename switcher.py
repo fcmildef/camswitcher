@@ -156,14 +156,14 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         # Defaults & options row
         defaults_row = Gtk.Box(spacing=8)
         outer.append(defaults_row)
-        self.chk_embed = Gtk.CheckButton(label="Embed preview (gtk4)")
-        self.chk_embed.set_active(True)  # default ON on Ubuntu; Debian can turn OFF
+        self.chk_preview = Gtk.CheckButton(label="Show preview window")
+        self.chk_preview.set_active(True)
         self.chk_autoload = Gtk.CheckButton(label="Auto-load defaults on start")
         btn_save_defaults = Gtk.Button(label="Save as Default")
         btn_clear_defaults = Gtk.Button(label="Clear Defaults")
         btn_save_defaults.connect("clicked", self.on_save_defaults)
         btn_clear_defaults.connect("clicked", self.on_clear_defaults)
-        defaults_row.append(self.chk_embed)
+        defaults_row.append(self.chk_preview)
         defaults_row.append(self.chk_autoload)
         defaults_row.append(btn_save_defaults)
         defaults_row.append(btn_clear_defaults)
@@ -265,7 +265,7 @@ class SwitcherWindow(Gtk.ApplicationWindow):
             "cam1": self._get_selected(self.cmb_cam1),
             "cam2": self._get_selected(self.cmb_cam2),
             "out": self._get_selected(self.cmb_out),
-            "embed": self.chk_embed.get_active(),
+            "preview": self.chk_preview.get_active(),
             "autoload": self.chk_autoload.get_active(),
         }
         try:
@@ -314,7 +314,7 @@ class SwitcherWindow(Gtk.ApplicationWindow):
             self._select_value(self.cmb_cam1, data.get("cam1"))
             self._select_value(self.cmb_cam2, data.get("cam2"))
             self._select_value(self.cmb_out, data.get("out"))
-            self.chk_embed.set_active(bool(data.get("embed", True)))
+            self.chk_preview.set_active(bool(data.get("preview", True)))
             self.chk_autoload.set_active(bool(data.get("autoload", False)))
             if autoload and not data.get("autoload", False):
                 return
@@ -329,21 +329,22 @@ class SwitcherWindow(Gtk.ApplicationWindow):
         if not self.input_selector:
             return False, "Missing GStreamer 'input-selector' (install gstreamer1.0-plugins-bad)."
 
-        # Preview sink: enforce embedding into GTK4 window using gtk4paintablesink
-        # This guarantees the preview is INSIDE the app (no extra window)
-        # Choose preview sink based on user option
-        if self.chk_embed.get_active():
+        preview_enabled = bool(self.chk_preview.get_active())
+        preview_fallback_label = None
+        self.preview_sink = None
+        q_preview = None
+        preview_convert = None
+        if preview_enabled:
+            # Preview sink: prefer embedded gtk4 sink, fallback to external sink if unavailable
             self.preview_sink = Gst.ElementFactory.make("gtk4paintablesink", "preview")
             if not self.preview_sink:
-                return False, ("Embedded preview requires 'gtk4paintablesink'. "
-                               "Install it: sudo apt install gstreamer1.0-gtk4, or untick 'Embed preview'.")
-        else:
-            # Non-embedded preview: prefer glimagesink, fallback to autovideosink
-            self.preview_sink = Gst.ElementFactory.make("glimagesink", "preview")
-            if not self.preview_sink:
-                self.preview_sink = Gst.ElementFactory.make("autovideosink", "preview")
-            if not self.preview_sink:
-                return False, "No preview sink available (install gstreamer1.0-gl)."
+                self.preview_sink = Gst.ElementFactory.make("glimagesink", "preview")
+                if not self.preview_sink:
+                    self.preview_sink = Gst.ElementFactory.make("autovideosink", "preview")
+                if not self.preview_sink:
+                    return False, ("No preview sink available. Install gstreamer1.0-gtk4 "
+                                   "for embedded preview or gstreamer1.0-gl for external preview.")
+                preview_fallback_label = "Preview opens in a separate window (GTK4 sink missing)"
 
         # Output sink to v4l2loopback
         out_convert = Gst.ElementFactory.make("videoconvert", "outconvert")
@@ -354,9 +355,10 @@ class SwitcherWindow(Gtk.ApplicationWindow):
 
         # Tee to split to preview and virtual device
         tee = Gst.ElementFactory.make("tee", "tee")
-        q_preview = Gst.ElementFactory.make("queue", "qprev")
         q_out = Gst.ElementFactory.make("queue", "qout")
-        preview_convert = Gst.ElementFactory.make("videoconvert", "prevconvert")
+        if preview_enabled:
+            q_preview = Gst.ElementFactory.make("queue", "qprev")
+            preview_convert = Gst.ElementFactory.make("videoconvert", "prevconvert")
 
         # Build two input branches with caps to ensure identical formats for the selector
         def make_input_branch(name: str, device: str):
@@ -379,8 +381,12 @@ class SwitcherWindow(Gtk.ApplicationWindow):
             return False, str(e)
 
         # Add all elements to pipeline
-        for el in br1 + br2 + [self.input_selector, tee, q_preview, q_out, preview_convert, self.preview_sink, out_convert, out_sink]:
-            self.pipeline.add(el)
+        pipeline_elements = br1 + br2 + [self.input_selector, tee, q_out, out_convert, out_sink]
+        if preview_enabled:
+            pipeline_elements.extend([q_preview, preview_convert, self.preview_sink])
+        for el in pipeline_elements:
+            if el:
+                self.pipeline.add(el)
 
         # Helper to link a simple chain
         def link_chain(elems):
@@ -427,31 +433,34 @@ class SwitcherWindow(Gtk.ApplicationWindow):
                 return False
             return srcpad.link(sinkpad) == Gst.PadLinkReturn.OK
 
-        if not tee_link(tee, q_preview):
-            return False, "Failed to request/link tee pad for preview."
+        if preview_enabled:
+            if not tee_link(tee, q_preview):
+                return False, "Failed to request/link tee pad for preview."
         if not tee_link(tee, q_out):
             return False, "Failed to request/link tee pad for output."
 
         # Finish each branch
-        if not link_chain([q_preview, preview_convert, self.preview_sink]):
-            return False, "Failed to link preview branch."
+        if preview_enabled:
+            if not link_chain([q_preview, preview_convert, self.preview_sink]):
+                return False, "Failed to link preview branch."
         if not link_chain([q_out, out_convert, out_sink]):
             return False, "Failed to link output branch."
 
         # Embed preview only for gtk4paintablesink (GTK4-safe)
         try:
-            if self.preview_sink and self.preview_sink.get_factory().get_name() == "gtk4paintablesink":
+            for c in self.preview_box.get_children():
+                self.preview_box.remove(c)
+            if not preview_enabled:
+                self.preview_box.append(Gtk.Label(label="Preview disabled."))
+            elif self.preview_sink and self.preview_sink.get_factory().get_name() == "gtk4paintablesink":
                 paintable = self.preview_sink.get_property("paintable")
                 if paintable:
                     picture = Gtk.Picture.new_for_paintable(paintable)
-                    for c in self.preview_box.get_children():
-                        self.preview_box.remove(c)
                     self.preview_box.append(picture)
             else:
-                # Non-embedded sinks render their own window; keep UI area empty
-                for c in self.preview_box.get_children():
-                    self.preview_box.remove(c)
-                self.preview_box.append(Gtk.Label(label="Preview opens in a separate window (embed off)"))
+                # Non-embedded sinks render their own window; keep UI area informative
+                message = preview_fallback_label or "Preview opens in a separate window."
+                self.preview_box.append(Gtk.Label(label=message))
         except Exception:
             pass
 
@@ -492,4 +501,3 @@ class SwitcherApp(Gtk.Application):
 if __name__ == "__main__":
     app = SwitcherApp()
     app.run(sys.argv)
-
