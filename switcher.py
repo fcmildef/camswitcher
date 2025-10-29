@@ -218,9 +218,12 @@ class SwitcherWindow(Gtk.ApplicationWindow):
     def on_refresh(self, *_):
         devs = list_video_devices()
         for cmb in (self.cmb_cam1, self.cmb_cam2, self.cmb_out):
+            current = self._get_selected(cmb)
             cmb.set_model(Gtk.StringList.new(devs))
-            # Don't auto-select blindly; keep current selection if present
-            if cmb.get_selected() < 0 and len(devs):
+            # Try to restore previous selection if still available
+            if current and current in devs:
+                self._select_value(cmb, current)
+            elif len(devs):
                 cmb.set_selected(0)
 
     def on_start(self, *_):
