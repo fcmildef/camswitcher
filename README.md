@@ -29,7 +29,7 @@ sudo apt update && sudo apt install -y \
 
 Load v4l2loopback (once per boot or persist via modprobe.d):
   sudo modprobe v4l2loopback video_nr=10 card_label="VirtualCam" exclusive_caps=1
-  # Your virtual camera will be /dev/video10 (change video_nr if you prefer)
+  Your virtual camera will be /dev/video10 (change video_nr if you prefer)
 
 Run:
   python3 video_switcher.py
